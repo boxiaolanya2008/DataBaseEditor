@@ -110,7 +110,10 @@ fun HomeScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.loadData() }) {
+                    IconButton(
+                        onClick = { viewModel.loadData() },
+                        enabled = !uiState.isLoading
+                    ) {
                         Icon(Icons.Default.Refresh, contentDescription = "刷新")
                     }
                 }

@@ -88,8 +88,7 @@ fun TutorialScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextButton(
-                        onClick = onComplete,
-                        enabled = pagerState.currentPage > 0
+                        onClick = onComplete
                     ) {
                         Text("跳过")
                     }

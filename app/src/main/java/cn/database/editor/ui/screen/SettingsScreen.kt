@@ -44,10 +44,10 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val settingsRepository = SettingsRepository(context)
-    val fileService = FileService(context)
+    val fileService = remember { FileService(context) }
     val workMode by settingsRepository.workMode.collectAsStateWithLifecycle(initialValue = WorkMode.NORMAL)
     val scope = rememberCoroutineScope()
-    val hasRoot = fileService.hasRootAccess()
+    val hasRoot = remember { fileService.checkRootAccessSync() }
 
     Scaffold(
         topBar = {

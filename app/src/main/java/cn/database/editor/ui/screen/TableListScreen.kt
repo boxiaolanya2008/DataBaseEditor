@@ -43,6 +43,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +77,12 @@ fun TableListScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    DisposableEffect(Unit) {
+        onDispose {
+            databaseService.closeDatabase()
+        }
+    }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -133,7 +140,10 @@ fun TableListScreen(
                     }) {
                         Icon(Icons.Default.Download, contentDescription = "导出数据库")
                     }
-                    IconButton(onClick = { viewModel.refreshTables() }) {
+                    IconButton(
+                        onClick = { viewModel.refreshTables() },
+                        enabled = !uiState.isLoading
+                    ) {
                         Icon(Icons.Default.Refresh, contentDescription = "刷新")
                     }
                 }

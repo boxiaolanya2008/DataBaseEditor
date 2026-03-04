@@ -91,22 +91,32 @@ class DatabaseService(private val context: Context) {
         try {
             val db = database ?: return@withContext Result.failure(Exception("数据库未打开"))
             val rows = mutableListOf<RowData>()
-            
-            val sql = if (!searchQuery.isNullOrEmpty() && !searchColumn.isNullOrEmpty()) {
-                "SELECT * FROM \"$tableName\" WHERE \"$searchColumn\" LIKE '%$searchQuery%' LIMIT $limit OFFSET $offset"
+
+            val safeTableName = tableName.replace("\"", "\"\"")
+            val sql: String
+            val selectionArgs: Array<String>?
+
+            if (!searchQuery.isNullOrEmpty() && !searchColumn.isNullOrEmpty()) {
+                val safeColumn = searchColumn.replace("\"", "\"\"")
+                sql = "SELECT * FROM \"$safeTableName\" WHERE \"$safeColumn\" LIKE ? LIMIT ? OFFSET ?"
+                selectionArgs = arrayOf("%$searchQuery%", limit.toString(), offset.toString())
             } else if (!searchQuery.isNullOrEmpty()) {
                 val columns = getTableColumnsSync(tableName)
                 if (columns.isNotEmpty()) {
-                    val whereClause = columns.joinToString(" OR ") { "\"${it.name}\" LIKE '%$searchQuery%'" }
-                    "SELECT * FROM \"$tableName\" WHERE $whereClause LIMIT $limit OFFSET $offset"
+                    val placeholders = columns.joinToString(" OR ") { "\"${it.name.replace("\"", "\"\"")}\" LIKE ?" }
+                    sql = "SELECT * FROM \"$safeTableName\" WHERE $placeholders LIMIT ? OFFSET ?"
+                    val searchArgs = Array(columns.size) { "%$searchQuery%" }
+                    selectionArgs = searchArgs + arrayOf(limit.toString(), offset.toString())
                 } else {
-                    "SELECT * FROM \"$tableName\" LIMIT $limit OFFSET $offset"
+                    sql = "SELECT * FROM \"$safeTableName\" LIMIT ? OFFSET ?"
+                    selectionArgs = arrayOf(limit.toString(), offset.toString())
                 }
             } else {
-                "SELECT * FROM \"$tableName\" LIMIT $limit OFFSET $offset"
+                sql = "SELECT * FROM \"$safeTableName\" LIMIT ? OFFSET ?"
+                selectionArgs = arrayOf(limit.toString(), offset.toString())
             }
-            
-            val cursor = db.rawQuery(sql, null)
+
+            val cursor = db.rawQuery(sql, selectionArgs)
             val columnNames = cursor.columnNames
             while (cursor.moveToNext()) {
                 val values = mutableMapOf<String, Any?>()
@@ -212,6 +222,17 @@ class DatabaseService(private val context: Context) {
         }
     }
 
+    suspend fun deleteRowWithArgs(tableName: String, whereClause: String, whereArgs: Array<String>): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            val db = database ?: return@withContext Result.failure(Exception("数据库未打开"))
+            val safeTableName = tableName.replace("\"", "\"\"")
+            val count = db.delete(safeTableName, whereClause, whereArgs)
+            Result.success(count)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun updateRow(
         tableName: String,
         values: ContentValues,
@@ -220,6 +241,22 @@ class DatabaseService(private val context: Context) {
         try {
             val db = database ?: return@withContext Result.failure(Exception("数据库未打开"))
             val count = db.update(tableName, values, whereClause, null)
+            Result.success(count)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateRowWithArgs(
+        tableName: String,
+        values: ContentValues,
+        whereClause: String,
+        whereArgs: Array<String>
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            val db = database ?: return@withContext Result.failure(Exception("数据库未打开"))
+            val safeTableName = tableName.replace("\"", "\"\"")
+            val count = db.update(safeTableName, values, whereClause, whereArgs)
             Result.success(count)
         } catch (e: Exception) {
             Result.failure(e)

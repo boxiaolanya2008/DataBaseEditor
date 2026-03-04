@@ -20,6 +20,8 @@ data class AppInfo(
 
 class FileService(private val context: Context) {
 
+    private var cachedRootAccess: Boolean? = null
+
     suspend fun getLocalDatabases(): Result<List<DatabaseFile>> = withContext(Dispatchers.IO) {
         try {
             val databases = mutableListOf<DatabaseFile>()
@@ -91,14 +93,28 @@ class FileService(private val context: Context) {
         }
     }
 
-    fun hasRootAccess(): Boolean {
+    suspend fun hasRootAccess(): Boolean = withContext(Dispatchers.IO) {
+        cachedRootAccess?.let { return@withContext it }
+
+        try {
+            val process = Runtime.getRuntime().exec("su -c exit")
+            val exitCode = process.waitFor()
+            val hasRoot = exitCode == 0
+            cachedRootAccess = hasRoot
+            hasRoot
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun checkRootAccessSync(): Boolean {
+        cachedRootAccess?.let { return it }
         return try {
-            val process = Runtime.getRuntime().exec("su")
-            val os = process.outputStream
-            os.write("exit\n".toByteArray())
-            os.flush()
-            os.close()
-            process.waitFor() == 0
+            val process = Runtime.getRuntime().exec("su -c exit")
+            val exitCode = process.waitFor()
+            val hasRoot = exitCode == 0
+            cachedRootAccess = hasRoot
+            hasRoot
         } catch (e: Exception) {
             false
         }

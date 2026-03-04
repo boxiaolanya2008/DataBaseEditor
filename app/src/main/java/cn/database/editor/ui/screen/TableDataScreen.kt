@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,8 +23,10 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,11 +44,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +79,14 @@ fun TableDataScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedRow by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var showSearch by remember { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var pendingDeleteRow by remember { mutableStateOf<RowData?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            databaseService.closeDatabase()
+        }
+    }
 
     LaunchedEffect(dbPath, tableName) {
         viewModel.loadTableData(dbPath, tableName)
@@ -276,7 +289,8 @@ fun TableDataScreen(
                                 showEditDialog = true
                             },
                             onLongClick = {
-                                viewModel.deleteRow(row)
+                                pendingDeleteRow = row
+                                showDeleteConfirmDialog = true
                             }
                         )
                     }
@@ -304,6 +318,40 @@ fun TableDataScreen(
             onAdd = { values ->
                 viewModel.insertRow(values)
                 showAddDialog = false
+            }
+        )
+    }
+
+    if (showDeleteConfirmDialog && pendingDeleteRow != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showDeleteConfirmDialog = false
+                pendingDeleteRow = null
+            },
+            title = { Text("确认删除") },
+            text = { Text("确定要删除这条记录吗？此操作可以撤销。") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        pendingDeleteRow?.let { row ->
+                            viewModel.deleteRow(row)
+                        }
+                        showDeleteConfirmDialog = false
+                        pendingDeleteRow = null
+                    }
+                ) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        showDeleteConfirmDialog = false
+                        pendingDeleteRow = null
+                    }
+                ) {
+                    Text("取消")
+                }
             }
         )
     }
@@ -405,7 +453,7 @@ private fun AddRowDialog(
     onDismiss: () -> Unit,
     onAdd: (Map<String, Any?>) -> Unit
 ) {
-    val editedValues = remember {
+    val editedValues = rememberSaveable {
         mutableStateOf(
             columns.associate { column ->
                 column.name to column.defaultValue
@@ -417,64 +465,77 @@ private fun AddRowDialog(
         onDismissRequest = onDismiss,
         title = { Text("添加记录") },
         text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(vertical = 8.dp)
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp)
             ) {
-                Text(
-                    text = "填写以下字段信息",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                columns.forEach { column ->
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = column.name,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = if (column.primaryKey) FontWeight.Bold else FontWeight.Normal
-                            )
-                            if (column.primaryKey) {
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Icon(
-                                    imageVector = Icons.Default.Key,
-                                    contentDescription = "主键",
-                                    modifier = Modifier.size(14.dp),
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            if (column.notNull) {
-                                Spacer(modifier = Modifier.width(4.dp))
+                androidx.compose.foundation.lazy.LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        Text(
+                            text = "填写以下字段信息",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    items(columns.size) { index ->
+                        val column = columns[index]
+                        Column(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = "*",
+                                    text = column.name,
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.error
+                                    fontWeight = if (column.primaryKey) FontWeight.Bold else FontWeight.Normal
+                                )
+                                if (column.primaryKey) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Key,
+                                        contentDescription = "主键",
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                if (column.notNull) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "*",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = column.type,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = column.type,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            Spacer(modifier = Modifier.height(4.dp))
+                            androidx.compose.material3.OutlinedTextField(
+                                value = editedValues.value[column.name]?.toString() ?: "",
+                                onValueChange = { newValue ->
+                                    editedValues.value[column.name] = if (newValue.isEmpty()) null else newValue
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                shape = RoundedCornerShape(8.dp),
+                                placeholder = {
+                                    Text(
+                                        text = column.defaultValue ?: "输入${column.name}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                }
                             )
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        androidx.compose.material3.OutlinedTextField(
-                            value = editedValues.value[column.name]?.toString() ?: "",
-                            onValueChange = { newValue ->
-                                editedValues.value[column.name] = if (newValue.isEmpty()) null else newValue
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            shape = RoundedCornerShape(8.dp),
-                            placeholder = {
-                                Text(
-                                    text = column.defaultValue ?: "输入${column.name}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                )
-                            }
-                        )
                     }
                 }
             }
@@ -502,51 +563,64 @@ private fun EditRowDialog(
     onDismiss: () -> Unit,
     onSave: (Map<String, Any?>) -> Unit
 ) {
-    val editedValues = remember { mutableStateOf(currentValues.toMutableMap()) }
+    val editedValues = rememberSaveable {
+        mutableStateOf(currentValues.toMutableMap())
+    }
 
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("编辑数据") },
         text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(vertical = 8.dp)
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp)
             ) {
-                columns.forEach { column ->
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = column.name,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = if (column.primaryKey) FontWeight.Bold else FontWeight.Normal
-                            )
-                            if (column.primaryKey) {
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Icon(
-                                    imageVector = Icons.Default.Key,
-                                    contentDescription = "主键",
-                                    modifier = Modifier.size(14.dp),
-                                    tint = MaterialTheme.colorScheme.primary
+                androidx.compose.foundation.lazy.LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(columns.size) { index ->
+                        val column = columns[index]
+                        Column(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = column.name,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (column.primaryKey) FontWeight.Bold else FontWeight.Normal
+                                )
+                                if (column.primaryKey) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Key,
+                                        contentDescription = "主键",
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = column.type,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = column.type,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            Spacer(modifier = Modifier.height(4.dp))
+                            androidx.compose.material3.OutlinedTextField(
+                                value = editedValues.value[column.name]?.toString() ?: "",
+                                onValueChange = { newValue ->
+                                    editedValues.value[column.name] = if (newValue.isEmpty()) null else newValue
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                shape = RoundedCornerShape(8.dp),
+                                enabled = !column.primaryKey
                             )
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        androidx.compose.material3.OutlinedTextField(
-                            value = editedValues.value[column.name]?.toString() ?: "",
-                            onValueChange = { newValue ->
-                                editedValues.value[column.name] = if (newValue.isEmpty()) null else newValue
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            shape = RoundedCornerShape(8.dp),
-                            enabled = !column.primaryKey
-                        )
                     }
                 }
             }

@@ -93,7 +93,10 @@ fun AppListScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.loadApps() }) {
+                    IconButton(
+                        onClick = { viewModel.loadApps() },
+                        enabled = !uiState.isLoading
+                    ) {
                         Icon(Icons.Default.Refresh, contentDescription = "刷新")
                     }
                 }

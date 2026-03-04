@@ -23,6 +23,7 @@ data class TableDataUiState(
     val currentPage: Int = 0,
     val pageSize: Int = 50,
     val totalRows: Int = 0,
+    val hasMoreRows: Boolean = true,
     val errorMessage: String? = null,
     val successMessage: String? = null,
     val canUndo: Boolean = false,
@@ -70,14 +71,20 @@ class TableDataViewModel(
         val offset = page * pageSize
         val searchQuery = _uiState.value.searchQuery
         val searchColumn = _uiState.value.searchColumn
-        
+
         databaseService.getTableData(tableName, pageSize, offset, searchQuery, searchColumn)
             .onSuccess { rows ->
+                val newTotalRows = if (page == 0) {
+                    if (rows.size < pageSize) rows.size else (page + 1) * pageSize
+                } else {
+                    _uiState.value.totalRows
+                }
                 _uiState.value = _uiState.value.copy(
                     rows = rows,
                     currentPage = page,
                     isLoading = false,
-                    totalRows = rows.size,
+                    totalRows = newTotalRows,
+                    hasMoreRows = rows.size == pageSize,
                     canUndo = operationHistory.canUndo(),
                     isSearching = searchQuery.isNotEmpty()
                 )
@@ -156,16 +163,29 @@ class TableDataViewModel(
             val tableName = _uiState.value.tableName
             val columns = _uiState.value.columns
             val pkColumn = columns.find { it.primaryKey }
-            
+
             if (pkColumn != null) {
                 val pkValue = row.values[pkColumn.name]
-                val whereClause = if (pkValue is String) {
-                    "${pkColumn.name} = '$pkValue'"
-                } else {
-                    "${pkColumn.name} = $pkValue"
+                val safeColumnName = pkColumn.name.replace("\"", "\"\"")
+                val whereClause: String
+                val whereArgs: Array<String>
+
+                when (pkValue) {
+                    is String -> {
+                        whereClause = "\"$safeColumnName\" = ?"
+                        whereArgs = arrayOf(pkValue)
+                    }
+                    is Number -> {
+                        whereClause = "\"$safeColumnName\" = ?"
+                        whereArgs = arrayOf(pkValue.toString())
+                    }
+                    else -> {
+                        _uiState.value = _uiState.value.copy(errorMessage = "不支持的主键类型")
+                        return@launch
+                    }
                 }
-                
-                databaseService.deleteRow(tableName, whereClause)
+
+                databaseService.deleteRowWithArgs(tableName, whereClause, whereArgs)
                     .onSuccess {
                         operationHistory.addOperation(
                             DatabaseOperation.DeleteOperation(tableName, row.values, whereClause)
@@ -185,7 +205,7 @@ class TableDataViewModel(
                     databaseService.deleteByRowId(tableName, rowid as Long)
                         .onSuccess {
                             operationHistory.addOperation(
-                                DatabaseOperation.DeleteOperation(tableName, row.values, "rowid = $rowid")
+                                DatabaseOperation.DeleteOperation(tableName, row.values, "rowid = ?")
                             )
                             _uiState.value = _uiState.value.copy(
                                 successMessage = "删除成功",
@@ -208,7 +228,7 @@ class TableDataViewModel(
             val tableName = _uiState.value.tableName
             val columns = _uiState.value.columns
             val pkColumn = columns.find { it.primaryKey }
-            
+
             val contentValues = ContentValues()
             newValues.forEach { (key, value) ->
                 when (value) {
@@ -222,21 +242,54 @@ class TableDataViewModel(
                     else -> contentValues.put(key, value.toString())
                 }
             }
-            
-            val whereClause = if (pkColumn != null) {
+
+            val result = if (pkColumn != null) {
                 val pkValue = oldValues[pkColumn.name]
-                if (pkValue is String) {
-                    "${pkColumn.name} = '$pkValue'"
-                } else {
-                    "${pkColumn.name} = $pkValue"
+                val safeColumnName = pkColumn.name.replace("\"", "\"\"")
+                val whereClause: String
+                val whereArgs: Array<String>
+
+                when (pkValue) {
+                    is String -> {
+                        whereClause = "\"$safeColumnName\" = ?"
+                        whereArgs = arrayOf(pkValue)
+                    }
+                    is Number -> {
+                        whereClause = "\"$safeColumnName\" = ?"
+                        whereArgs = arrayOf(pkValue.toString())
+                    }
+                    else -> {
+                        val rowid = oldValues["rowid"]
+                        if (rowid != null) {
+                            whereClause = "rowid = ?"
+                            whereArgs = arrayOf(rowid.toString())
+                        } else {
+                            _uiState.value = _uiState.value.copy(errorMessage = "无法定位此行")
+                            return@launch
+                        }
+                    }
                 }
+                databaseService.updateRowWithArgs(tableName, contentValues, whereClause, whereArgs)
             } else {
                 val rowid = oldValues["rowid"]
-                "rowid = $rowid"
+                if (rowid != null) {
+                    databaseService.updateRowWithArgs(tableName, contentValues, "rowid = ?", arrayOf(rowid.toString()))
+                } else {
+                    _uiState.value = _uiState.value.copy(errorMessage = "无法定位此行")
+                    return@launch
+                }
             }
-            
-            databaseService.updateRow(tableName, contentValues, whereClause)
+
+            result
                 .onSuccess {
+                    val whereClause = pkColumn?.let {
+                        val pkValue = oldValues[it.name]
+                        when (pkValue) {
+                            is String -> "${it.name} = ?"
+                            else -> "${it.name} = ?"
+                        }
+                    } ?: "rowid = ?"
+
                     operationHistory.addOperation(
                         DatabaseOperation.UpdateOperation(tableName, oldValues, newValues, whereClause)
                     )
