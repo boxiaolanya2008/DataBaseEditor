@@ -55,6 +55,9 @@ import cn.database.editor.data.repository.SettingsRepository
 import cn.database.editor.data.repository.WorkMode
 import cn.database.editor.data.service.FileService
 import cn.database.editor.ui.component.DatabaseFileCard
+import cn.database.editor.ui.component.ConnectionStatusIndicator
+import cn.database.editor.ui.component.EmptyState
+import cn.database.editor.ui.component.ResponsiveGrid
 import cn.database.editor.ui.viewmodel.HomeViewModel
 import cn.database.editor.util.FileUtil
 import kotlinx.coroutines.launch
@@ -103,7 +106,16 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("数据库编辑器") },
+                title = { 
+                    Column {
+                        Text("数据库编辑器", style = MaterialTheme.typography.titleLarge)
+                        ConnectionStatusIndicator(
+                            isConnected = uiState.localDatabases.isNotEmpty(),
+                            databaseName = if (uiState.localDatabases.isNotEmpty()) "${uiState.localDatabases.size} 个数据库" else "",
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onOpenDrawer) {
                         Icon(Icons.Default.Menu, contentDescription = "菜单")
@@ -182,8 +194,14 @@ fun HomeScreen(
 
                 if (uiState.localDatabases.isEmpty()) {
                     EmptyState(
-                        onOpenFile = {
-                            filePicker.launch(arrayOf("*/*"))
+                        message = "暂无数据库文件\n点击右下角按钮打开数据库文件",
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.Storage,
+                                contentDescription = null,
+                                modifier = Modifier.size(80.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     )
                 } else {
@@ -192,23 +210,19 @@ fun HomeScreen(
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
-                    LazyColumn(
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(uiState.localDatabases) { database ->
-                            DatabaseFileCard(
-                                database = database,
-                                onClick = {
-                                    if (database.isReadable) {
-                                        onDatabaseSelected(database.path)
-                                    }
+                    ResponsiveGrid(
+                        items = uiState.localDatabases,
+                        modifier = Modifier.fillMaxSize()
+                    ) { database ->
+                        DatabaseFileCard(
+                            database = database as DatabaseFile,
+                            onClick = {
+                                if (database.isReadable) {
+                                    onDatabaseSelected(database.path)
                                 }
-                            )
-                        }
-                        item {
-                            Spacer(modifier = Modifier.height(80.dp))
-                        }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }

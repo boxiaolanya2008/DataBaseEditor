@@ -2,10 +2,19 @@ package cn.database.editor.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+val DatabaseBlue80 = Color(0xFF4A90E2)
+val DatabaseTeal80 = Color(0xFF50E3C2)
+val DatabaseGray80 = Color(0xFFB8C2CC)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+val DatabaseBlue40 = Color(0xFF1A73E8)
+val DatabaseTeal40 = Color(0xFF00BFA5)
+val DatabaseGray40 = Color(0xFF5F6368)
+
+val SuccessGreen = Color(0xFF34A853)
+val WarningAmber = Color(0xFFFBBC04)
+val ErrorRed = Color(0xFFEA4335)
+val InfoBlue = Color(0xFF4285F4)
+
+val SurfaceElevated = Color(0xFFF8F9FA)
+val SurfaceContainer = Color(0xFFE8EAED)
+val OnSurfaceVariant = Color(0xFF5F6368)

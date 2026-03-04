@@ -50,7 +50,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,7 +79,7 @@ fun TableDataScreen(
     var selectedRow by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var showSearch by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
-    var pendingDeleteRow by remember { mutableStateOf<RowData?>(null) }
+    var pendingDeleteRow by remember { mutableStateOf<cn.database.editor.data.model.RowData?>(null) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -115,9 +114,9 @@ fun TableDataScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(tableName)
+                        Text(tableName, style = MaterialTheme.typography.titleLarge)
                         Text(
-                            text = if (uiState.isSearching) "搜索结果" else "第 ${uiState.currentPage + 1} 页",
+                            text = if (uiState.isSearching) "搜索结果" else "第 ${uiState.currentPage + 1} 页，共 ${uiState.totalRows} 行",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -453,7 +452,7 @@ private fun AddRowDialog(
     onDismiss: () -> Unit,
     onAdd: (Map<String, Any?>) -> Unit
 ) {
-    val editedValues = rememberSaveable {
+    val editedValues = remember {
         mutableStateOf(
             columns.associate { column ->
                 column.name to column.defaultValue
@@ -563,7 +562,7 @@ private fun EditRowDialog(
     onDismiss: () -> Unit,
     onSave: (Map<String, Any?>) -> Unit
 ) {
-    val editedValues = rememberSaveable {
+    val editedValues = remember {
         mutableStateOf(currentValues.toMutableMap())
     }
 
